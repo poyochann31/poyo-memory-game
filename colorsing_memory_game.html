@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ぽよの神経衰弱</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px 12px 32px;
+    background: #171923;
+    color: #f7f7fb;
+    font-family: system-ui, sans-serif;
+    text-align: center;
+  }
+  h1 { font-size: 26px; margin: 8px 0; }
+  .intro { color: #c5c7d3; font-size: 14px; }
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 20px auto 14px;
+  }
+  .stat {
+    background: #272b3b;
+    border-radius: 12px;
+    padding: 10px 18px;
+    min-width: 105px;
+  }
+  .stat-label { color: #bfc3d5; font-size: 12px; }
+  .stat-value { font-size: 23px; font-weight: bold; }
+  #board {
+    width: min(100%, 540px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .card {
+    aspect-ratio: 3 / 4;
+    min-width: 0;
+    border: 2px solid #555b7a;
+    border-radius: 10px;
+    background: #343a59;
+    color: white;
+    font-size: clamp(22px, 6vw, 38px);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card.face-up {
+    background: #fff;
+    border-color: #c6b8ff;
+    color: #222;
+  }
+  .card.matched {
+    background: #b9f0d0;
+    border-color: #65c995;
+    cursor: default;
+  }
+  .card:focus-visible, button:focus-visible {
+    outline: 3px solid #ffe08a;
+    outline-offset: 2px;
+  }
+  .actions { margin: 18px 0; }
+  .action-button {
+    background: #a996ff;
+    color: #171323;
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  #message {
+    min-height: 52px;
+    margin: 14px auto;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .record { color: #ffe08a; }
+  .note { color: #aeb2c5; font-size: 12px; margin-top: 24px; }
+  @media (max-width: 360px) {
+    #board { gap: 4px; }
+    .card { border-radius: 7px; }
+    .stat { min-width: 90px; padding: 8px 12px; }
+  }
+</style>
+</head>
+<body>
+<h1>🎸 ぽよの神経衰弱</h1>
+<div class="intro">15組30枚、全部そろえるまでのタイムアタック！</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-label">タイム</div>
+    <div class="stat-value" id="timer">00:00</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">めくった回数</div>
+    <div class="stat-value" id="moves">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">自己ベスト</div>
+    <div class="stat-value" id="best">--:--</div>
+  </div>
+</div>
+
+<div id="board" aria-label="神経衰弱のカード"></div>
+
+<div id="message" aria-live="polite">
+  「ゲームを始める」を押して挑戦しよう！
+</div>
+
+<div class="actions">
+  <button class="action-button" id="restart">ゲームを始める</button>
+</div>
+
+<div class="note">
+  現在の自己ベストは、この端末のブラウザに保存されます。<br>
+  共通ランキングは、今後追加する予定です。
+</div>
+
+<script>
+(() => {
+  // カードの絵柄。後からイラスト画像に差し替えられます。
+  const pictures = [
+    "🎸", "🎤", "🎵", "🎶", "🎼",
+    "🌙", "⭐", "🌸", "🌻", "🍀",
+    "🐈", "🐇", "🐻", "🐣", "🦊"
+  ];
+
+  const board = document.getElementById("board");
+  const timerDisplay = document.getElementById("timer");
+  const movesDisplay = document.getElementById("moves");
+  const bestDisplay = document.getElementById("best");
+  const message = document.getElementById("message");
+  const restartButton = document.getElementById("restart");
+
+  let deck = [];
+  let firstCard = null;
+  let secondCard = null;
+  let locked = true;
+  let matchedPairs = 0;
+  let moves = 0;
+  let startedAt = null;
+  let elapsedSeconds = 0;
+  let timerInterval = null;
+  let flipTimeout = null;
+
+  const bestKey = "poyoMemoryBestV1";
+
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return String(mins).padStart(2, "0") + ":" +
+           String(secs).padStart(2, "0");
+  }
+
+  function readBest() {
+    try {
+      const value = localStorage.getItem(bestKey);
+      return value === null ? null : Number(value);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function showBest() {
+    const best = readBest();
+    bestDisplay.textContent =
+      best === null ? "--:--" : formatTime(best);
+  }
+
+  function updateTimer() {
+    if (startedAt === null) return;
+    elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    timerDisplay.textContent = formatTime(elapsedSeconds);
+  }
+
+  function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function renderBoard() {
+    board.innerHTML = "";
+
+    deck.forEach((card, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "card";
+      button.textContent = "？";
+      button.setAttribute("aria-label", "カード " + (index + 1));
+      button.addEventListener("click", () => flipCard(index));
+      board.appendChild(button);
+      card.element = button;
+    });
+  }
+
+  function startGame() {
+    clearInterval(timerInterval);
+    clearTimeout(flipTimeout);
+
+    deck = shuffle(
+      pictures.flatMap((picture, pairId) => [
+        { pairId, picture, open: false, matched: false },
+        { pairId, picture, open: false, matched: false }
+      ])
+    );
+
+    firstCard = null;
+    secondCard = null;
+    locked = false;
+    matchedPairs = 0;
+    moves = 0;
+    startedAt = null;
+    elapsedSeconds = 0;
+
+    timerDisplay.textContent = "00:00";
+    movesDisplay.textContent = "0";
+    message.textContent = "同じ絵柄のカードを2枚ずつ見つけよう！";
+
+    renderBoard();
+  }
+
+  function flipCard(index) {
+    if (locked) return;
+
+    const card = deck[index];
+    if (card.open || card.matched) return;
+
+    if (startedAt === null) {
+      startedAt = Date.now();
+      timerInterval = setInterval(updateTimer, 250);
+    }
+
+    card.open = true;
+    card.element.textContent = card.picture;
+    card.element.classList.add("face-up");
+    card.element.setAttribute("aria-label", card.picture);
+
+    if (firstCard === null) {
+      firstCard = card;
+      return;
+    }
+
+    secondCard = card;
+    moves++;
+    movesDisplay.textContent = String(moves);
+
+    if (firstCard.pairId === secondCard.pairId) {
+      firstCard.matched = true;
+      secondCard.matched = true;
+      firstCard.element.classList.add("matched");
+      secondCard.element.classList.add("matched");
+
+      firstCard = null;
+      secondCard = null;
+      matchedPairs++;
+
+      if (matchedPairs === pictures.length) {
+        finishGame();
+      }
+    } else {
+      locked = true;
+      flipTimeout = setTimeout(() => {
+        [firstCard, secondCard].forEach(c => {
+          c.open = false;
+          c.element.textContent = "？";
+          c.element.classList.remove("face-up");
+          c.element.setAttribute("aria-label", "裏向きのカード");
+        });
+
+        firstCard = null;
+        secondCard = null;
+        locked = false;
+      }, 850);
+    }
+  }
+
+  function finishGame() {
+    clearInterval(timerInterval);
+    updateTimer();
+    locked = true;
+
+    let recordMessage = "";
+    const previousBest = readBest();
+
+    if (previousBest === null || elapsedSeconds < previousBest) {
+      try {
+        localStorage.setItem(bestKey, String(elapsedSeconds));
+        recordMessage = "<br><span class='record'>自己ベスト更新！</span>";
+      } catch (e) {
+        recordMessage = "<br>記録を保存できませんでした。";
+      }
+    }
+
+    showBest();
+    message.innerHTML =
+      "🎉 クリア！ おめでとう！<br>" +
+      "タイム：" + formatTime(elapsedSeconds) +
+      " ／ めくった回数：" + moves +
+      recordMessage;
+  }
+
+  restartButton.addEventListener("click", startGame);
+  showBest();
+  startGame();
+})();
+</script>
+</body>
+</html>
