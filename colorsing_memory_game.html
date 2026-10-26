@@ -86,6 +86,17 @@
   }
   .record { color: #ffe08a; }
   .note { color: #aeb2c5; font-size: 12px; margin-top: 24px; }
+  .player { margin: 16px auto; max-width: 540px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .player input { min-width:0; width:min(260px,65vw); padding:11px; border-radius:9px; border:1px solid #555b7a; background:#272b3b; color:#fff; font-size:16px; }
+  .rankings { max-width:760px; margin:28px auto; text-align:left; }
+  .rank-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  .rank-tabs button { border:1px solid #555b7a; background:#272b3b; color:#f7f7fb; border-radius:9px; padding:9px 12px; cursor:pointer; }
+  .rank-tabs button.active { background:#a996ff; color:#171323; }
+  .rank-panel { background:#272b3b; border-radius:12px; padding:14px; overflow-x:auto; }
+  .rank-panel h3 { margin:0 0 10px; }
+  .rank-panel ol { padding-left:26px; margin:0; }
+  .rank-panel li { padding:5px 0; overflow-wrap:anywhere; }
+  .status { color:#c5c7d3; font-size:13px; min-height:20px; margin:8px 0; }
   @media (max-width: 360px) {
     #board { gap: 4px; }
     .card { border-radius: 7px; }
@@ -112,6 +123,10 @@
   </div>
 </div>
 
+<div class="player">
+  <label for="playerName" style="align-self:center">参加名</label>
+  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="ColorSingで使う名前など">
+</div>
 <div id="board" aria-label="神経衰弱のカード"></div>
 
 <div id="message" aria-live="polite">
@@ -122,9 +137,20 @@
   <button class="action-button" id="restart">ゲームを始める</button>
 </div>
 
+<div class="status" id="saveStatus" aria-live="polite">共通ランキングに接続しています…</div>
+<section class="rankings" aria-label="共通ランキング">
+  <h2>🏆 ぽよのランキング</h2>
+  <div class="rank-tabs">
+    <button type="button" class="active" data-rank="fast">今月の最速</button>
+    <button type="button" data-rank="moves">今月の最短</button>
+    <button type="button" data-rank="days">今月の継続</button>
+    <button type="button" data-rank="all">歴代ランキング</button>
+  </div>
+  <div class="rank-panel" id="rankPanel"><p>ランキングを読み込み中…</p></div>
+</section>
 <div class="note">
-  現在の自己ベストは、この端末のブラウザに保存されます。<br>
-  共通ランキングは、今後追加する予定です。
+  共通ランキングにはクリア記録が保存されます。参加名は本人確認されません。<br>
+  自己ベストはこの端末にも保存されます。ランキングへの反映には通信が必要です。
 </div>
 
 <script>
@@ -142,6 +168,16 @@
   const bestDisplay = document.getElementById("best");
   const message = document.getElementById("message");
   const restartButton = document.getElementById("restart");
+  const playerNameInput = document.getElementById("playerName");
+  const saveStatus = document.getElementById("saveStatus");
+  const rankPanel = document.getElementById("rankPanel");
+
+  // Supabase公開設定：この公開用キーだけを設定してください。秘密鍵は絶対に入れないでください。
+  const SUPABASE_URL = "https://whhkacmvdsncciclsnmw.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RX65B6PCsKcitE70f4UyNg_FB8niWGZ";
+  const RECORDS_ENDPOINT = SUPABASE_URL + "/rest/v1/game_records";
+  let rankingMode = "fast";
+  let cachedRecords = [];
 
   let deck = [];
   let firstCard = null;
@@ -151,6 +187,7 @@
   let moves = 0;
   let startedAt = null;
   let elapsedSeconds = 0;
+  let elapsedMs = 0;
   let timerInterval = null;
   let flipTimeout = null;
 
@@ -180,7 +217,8 @@
 
   function updateTimer() {
     if (startedAt === null) return;
-    elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    elapsedMs = Date.now() - startedAt;
+    elapsedSeconds = Math.floor(elapsedMs / 1000);
     timerDisplay.textContent = formatTime(elapsedSeconds);
   }
 
@@ -225,6 +263,7 @@
     moves = 0;
     startedAt = null;
     elapsedSeconds = 0;
+    elapsedMs = 0;
 
     timerDisplay.textContent = "00:00";
     movesDisplay.textContent = "0";
@@ -292,6 +331,7 @@
     clearInterval(timerInterval);
     updateTimer();
     locked = true;
+    elapsedMs = Math.max(1, Date.now() - startedAt);
 
     let recordMessage = "";
     const previousBest = readBest();
@@ -311,11 +351,131 @@
       "タイム：" + formatTime(elapsedSeconds) +
       " ／ めくった回数：" + moves +
       recordMessage;
+    saveRecord();
   }
+
+  function configured() {
+    return SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_");
+  }
+
+  async function apiFetch(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": "Bearer " + SUPABASE_PUBLISHABLE_KEY,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error("Supabase " + response.status + ": " + detail.slice(0, 240));
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  }
+
+  async function saveRecord() {
+    if (!configured()) {
+      saveStatus.textContent = "Supabaseの公開用キーをHTMLに設定すると、共通ランキングに記録されます。";
+      return;
+    }
+    const name = playerNameInput.value.trim().slice(0, 20);
+    if (!name) {
+      saveStatus.textContent = "今回の記録は未保存です。参加名を入力してから、もう一度プレイしてください。";
+      return;
+    }
+    try {
+      await apiFetch(RECORDS_ENDPOINT, {
+        method: "POST",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          player_name: name,
+          clear_time_ms: Math.max(1, Math.round(elapsedMs)),
+          moves: Math.max(1, moves),
+          played_on: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" })
+        })
+      });
+      saveStatus.textContent = "記録を共通ランキングに保存しました。";
+      await loadRankings();
+    } catch (error) {
+      saveStatus.textContent = "記録を保存できませんでした。Supabase設定を確認してください。";
+      console.error(error);
+    }
+  }
+
+  function monthStartJST() {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year:"numeric", month:"2-digit" }).formatToParts(new Date());
+    const y = parts.find(p => p.type === "year").value;
+    const m = parts.find(p => p.type === "month").value;
+    return `${y}-${m}-01`;
+  }
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function timeText(ms) {
+    const total = Math.floor(ms / 1000);
+    return formatTime(total) + "." + String(Math.floor(ms % 1000 / 100)).padStart(1, "0");
+  }
+  function renderRanking() {
+    if (!cachedRecords.length) {
+      rankPanel.innerHTML = "<p>まだ記録がありません。最初の記録を作ってみよう！</p>";
+      return;
+    }
+    const month = monthStartJST();
+    const monthly = cachedRecords.filter(r => r.played_on >= month);
+    let title = "", rows = [];
+    if (rankingMode === "fast") {
+      title = "今月の最速";
+      const best = new Map();
+      monthly.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
+      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
+    } else if (rankingMode === "moves") {
+      title = "今月の最短";
+      const best = new Map();
+      monthly.forEach(r => { if (!best.has(r.player_name) || r.moves < best.get(r.player_name).moves || (r.moves === best.get(r.player_name).moves && r.clear_time_ms < best.get(r.player_name).clear_time_ms)) best.set(r.player_name, r); });
+      rows = [...best.values()].sort((a,b)=>a.moves-b.moves || a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${r.moves}手（${timeText(r.clear_time_ms)}）`);
+    } else if (rankingMode === "days") {
+      title = "今月の継続";
+      const days = new Map();
+      monthly.forEach(r => { if (!days.has(r.player_name)) days.set(r.player_name, new Set()); days.get(r.player_name).add(r.played_on); });
+      rows = [...days.entries()].sort((a,b)=>b[1].size-a[1].size || a[0].localeCompare(b[0],"ja")).slice(0,10).map(([name, dates])=>`${esc(name)} — ${dates.size}日`);
+    } else {
+      title = "歴代ランキング（最速）";
+      const best = new Map();
+      cachedRecords.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
+      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
+    }
+    rankPanel.innerHTML = `<h3>${title}</h3>` + (rows.length ? `<ol>${rows.map(r=>`<li>${r}</li>`).join("")}</ol>` : "<p>今月の記録はまだありません。</p>");
+  }
+  async function loadRankings() {
+    if (!configured()) {
+      saveStatus.textContent = "公開用キーの設定待ちです。";
+      rankPanel.innerHTML = "<p>公開用キーをHTMLに設定するとランキングが表示されます。</p>";
+      return;
+    }
+    try {
+      const data = await apiFetch(RECORDS_ENDPOINT + "?select=player_name,clear_time_ms,moves,played_on,created_at&order=created_at.desc&limit=5000");
+      cachedRecords = Array.isArray(data) ? data : [];
+      renderRanking();
+      saveStatus.textContent = "共通ランキングに接続しました。";
+    } catch (error) {
+      rankPanel.innerHTML = "<p>ランキングを読み込めませんでした。Supabaseの設定を確認してください。</p>";
+      saveStatus.textContent = "ランキング接続エラー。設定を確認してください。";
+      console.error(error);
+    }
+  }
+  document.querySelectorAll("[data-rank]").forEach(button => button.addEventListener("click", () => {
+    rankingMode = button.dataset.rank;
+    document.querySelectorAll("[data-rank]").forEach(b => b.classList.toggle("active", b === button));
+    renderRanking();
+  }));
 
   restartButton.addEventListener("click", startGame);
   showBest();
   startGame();
+  loadRankings();
 })();
 </script>
 </body>
