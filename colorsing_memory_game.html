@@ -44,6 +44,10 @@
     border: 2px solid #555b7a;
     border-radius: 10px;
     background: #343a59;
+    background-image: url("poyo_back.png");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     color: white;
     font-size: clamp(22px, 6vw, 38px);
     cursor: pointer;
@@ -237,7 +241,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "card";
-      button.textContent = "？";
+      button.textContent = "";
       button.setAttribute("aria-label", "カード " + (index + 1));
       button.addEventListener("click", () => flipCard(index));
       board.appendChild(button);
@@ -315,7 +319,7 @@
       flipTimeout = setTimeout(() => {
         [firstCard, secondCard].forEach(c => {
           c.open = false;
-          c.element.textContent = "？";
+          c.element.textContent = "";
           c.element.classList.remove("face-up");
           c.element.setAttribute("aria-label", "裏向きのカード");
         });
