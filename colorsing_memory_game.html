@@ -62,6 +62,14 @@
     border-color: #c6b8ff;
     color: #222;
   }
+  .card-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 7px;
+    pointer-events: none;
+  }
   .card.matched {
     background: #b9f0d0;
     border-color: #65c995;
@@ -128,8 +136,8 @@
 </div>
 
 <div class="player">
-  <label for="playerName" style="align-self:center">参加名</label>
-  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="ColorSingで使う名前など">
+  <label for="playerName" style="align-self:center">ぽよに呼ばれている名前</label>
+  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="ぽよに呼ばれている名前を入力">
 </div>
 <div id="board" aria-label="神経衰弱のカード"></div>
 
@@ -145,10 +153,10 @@
 <section class="rankings" aria-label="共通ランキング">
   <h2>🏆 ぽよのランキング</h2>
   <div class="rank-tabs">
-    <button type="button" class="active" data-rank="fast">今月の最速</button>
-    <button type="button" data-rank="moves">今月の最短</button>
-    <button type="button" data-rank="days">今月の継続</button>
-    <button type="button" data-rank="all">歴代ランキング</button>
+    <button type="button" class="active" data-rank="fast">タイムアタック</button>
+    <button type="button" data-rank="moves">最短手数</button>
+    <button type="button" data-rank="days">プレイ日数</button>
+    <button type="button" data-rank="all">歴代タイムアタック</button>
   </div>
   <div class="rank-panel" id="rankPanel"><p>ランキングを読み込み中…</p></div>
 </section>
@@ -159,11 +167,23 @@
 
 <script>
 (() => {
-  // カードの絵柄。後からイラスト画像に差し替えられます。
+  // カードの絵柄：GitHubにアップロードした15枚の画像
   const pictures = [
-    "🎸", "🎤", "🎵", "🎶", "🎼",
-    "🌙", "⭐", "🌸", "🌻", "🍀",
-    "🐈", "🐇", "🐻", "🐣", "🦊"
+    "card1.png.PNG",
+    "card2%2Cpng.PNG",
+    "card3.png.PNG",
+    "card4.png.PNG",
+    "card5.png.PNG",
+    "card6.png.PNG",
+    "card7.png.PNG",
+    "card8.png.PNG",
+    "card9.png.PNG",
+    "card10.png.PNG",
+    "card11.png.PNG",
+    "card12.png.PNG",
+    "card13.png.PNG",
+    "card14.png.PNG",
+    "card15.png.PNG"
   ];
 
   const board = document.getElementById("board");
@@ -288,9 +308,14 @@
     }
 
     card.open = true;
-    card.element.textContent = card.picture;
+    card.element.textContent = "";
+    const image = document.createElement("img");
+    image.className = "card-image";
+    image.src = card.picture;
+    image.alt = "カードのイラスト";
+    card.element.appendChild(image);
     card.element.classList.add("face-up");
-    card.element.setAttribute("aria-label", card.picture);
+    card.element.setAttribute("aria-label", "イラストのカード");
 
     if (firstCard === null) {
       firstCard = card;
@@ -435,22 +460,22 @@
     const monthly = cachedRecords.filter(r => r.played_on >= month);
     let title = "", rows = [];
     if (rankingMode === "fast") {
-      title = "今月の最速";
+      title = "タイムアタック（今月の最速クリアタイム）";
       const best = new Map();
       monthly.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
       rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
     } else if (rankingMode === "moves") {
-      title = "今月の最短";
+      title = "最短手数（今月の最少手数）";
       const best = new Map();
       monthly.forEach(r => { if (!best.has(r.player_name) || r.moves < best.get(r.player_name).moves || (r.moves === best.get(r.player_name).moves && r.clear_time_ms < best.get(r.player_name).clear_time_ms)) best.set(r.player_name, r); });
       rows = [...best.values()].sort((a,b)=>a.moves-b.moves || a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${r.moves}手（${timeText(r.clear_time_ms)}）`);
     } else if (rankingMode === "days") {
-      title = "今月の継続";
+      title = "プレイ日数（今月プレイした日数）";
       const days = new Map();
       monthly.forEach(r => { if (!days.has(r.player_name)) days.set(r.player_name, new Set()); days.get(r.player_name).add(r.played_on); });
       rows = [...days.entries()].sort((a,b)=>b[1].size-a[1].size || a[0].localeCompare(b[0],"ja")).slice(0,10).map(([name, dates])=>`${esc(name)} — ${dates.size}日`);
     } else {
-      title = "歴代ランキング（最速）";
+      title = "歴代タイムアタック（歴代最速クリアタイム）";
       const best = new Map();
       cachedRecords.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
       rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
