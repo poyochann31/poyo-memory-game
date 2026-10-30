@@ -79,7 +79,7 @@
     outline: 3px solid #ffe08a;
     outline-offset: 2px;
   }
-  .actions { margin: 18px 0; }
+  .actions { margin: 18px 0; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
   .action-button {
     background: #a996ff;
     color: #171323;
@@ -89,6 +89,11 @@
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
+  }
+  .secondary-button {
+    background: #343a59;
+    color: #f7f7fb;
+    border: 1px solid #777d9c;
   }
   #message {
     min-height: 52px;
@@ -109,10 +114,40 @@
   .rank-panel ol { padding-left:26px; margin:0; }
   .rank-panel li { padding:5px 0; overflow-wrap:anywhere; }
   .status { color:#c5c7d3; font-size:13px; min-height:20px; margin:8px 0; }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0,0,0,.72);
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    width: min(100%, 520px);
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 22px 20px;
+    border: 1px solid #777d9c;
+    border-radius: 16px;
+    background: #272b3b;
+    color: #f7f7fb;
+    text-align: left;
+    line-height: 1.8;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+  }
+  .modal h2 { margin: 0 0 14px; font-size: 20px; text-align:center; }
+  .modal p { margin: 10px 0; }
+  .modal ol { padding-left: 24px; }
+  .modal-close { display:block; margin:18px auto 0; }
+  .image-status { color:#c5c7d3; font-size:12px; min-height:20px; margin:4px auto 8px; }
   @media (max-width: 360px) {
     #board { gap: 4px; }
     .card { border-radius: 7px; }
     .stat { min-width: 90px; padding: 8px 12px; }
+    .modal { padding:18px 15px; }
   }
 </style>
 </head>
@@ -137,8 +172,9 @@
 
 <div class="player">
   <label for="playerName" style="align-self:center">ぽよに呼ばれている名前</label>
-  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="ぽよに呼ばれている名前を入力">
+  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="毎回同じ名前で入力♪">
 </div>
+<div id="imageStatus" class="image-status" aria-live="polite">イラストを準備しています。ゲームはいつでも始められます。</div>
 <div id="board" aria-label="神経衰弱のカード"></div>
 
 <div id="message" aria-live="polite">
@@ -146,7 +182,8 @@
 </div>
 
 <div class="actions">
-  <button class="action-button" id="restart">ゲームを始める</button>
+  <button class="action-button" id="restart" type="button">ゲームを始める</button>
+  <button class="action-button secondary-button" id="rulesButton" type="button">始める前に読んでね</button>
 </div>
 
 <div class="status" id="saveStatus" aria-live="polite">共通ランキングに接続しています…</div>
@@ -165,25 +202,35 @@
   自己ベストはこの端末にも保存されます。ランキングへの反映には通信が必要です。
 </div>
 
+<div class="modal-backdrop" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="modal">
+    <h2 id="rulesTitle">始める前に読んでね</h2>
+    <p>ぽよ神経衰弱へようこそ🌙</p>
+    <p>初めて遊ぶときはイラストの読み込みに少々お時間をいただきます。読み込みエラーになっていても、ゲームは始められます。最初はイラストを楽しみながら、ゆっくり楽しんでもらえたら嬉しいです♪</p>
+    <p>2回目以降は画像の読み込みが済んでいる場合もあるので、気が向いたらランキングにも挑戦してみてね☆<br>
+    もちろん、ランキングを気にせず遊ぶだけでも大歓迎です！</p>
+    <h3>遊び方</h3>
+    <ol>
+      <li>「ゲームを始める」を押してスタート。</li>
+      <li>カードを2枚ずつめくろう。</li>
+      <li>同じ絵柄が出たらペア成立！</li>
+      <li>違う絵柄ならカードは元に戻るよ。</li>
+      <li>15組すべてそろえたらクリア！</li>
+    </ol>
+    <p>ランキングに参加するときは、毎回同じ名前で入力してね！</p>
+    <button class="action-button modal-close" id="closeRules" type="button">閉じる</button>
+  </div>
+</div>
+
 <script>
 (() => {
-  // カードの絵柄：GitHubにアップロードした15枚の画像
+  // GitHubにアップロードした15枚のイラスト
   const pictures = [
-    "card1.png.PNG",
-    "card2.png.PNG",
-    "card3.png.PNG",
-    "card4.png.PNG",
-    "card5.png.PNG",
-    "card6.png.PNG",
-    "card7.png.PNG",
-    "card8.png.PNG",
-    "card9.png.PNG",
-    "card10.png.PNG",
-    "card11.png.PNG",
-    "card12.png.PNG",
-    "card13.png.PNG",
-    "card14.png.PNG",
-    "card15.png.PNG"
+    "card1.new.PNG", "card2.new.PNG", "card3.new.PNG",
+    "card4.new.PNG", "card5.new.PNG", "card6.new.PNG",
+    "card7.new.PNG", "card8.new.PNG", "card9.new.PNG",
+    "card10.new.PNG", "card11.new.PNG", "card12.new.PNG",
+    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG"
   ];
 
   const board = document.getElementById("board");
@@ -195,8 +242,11 @@
   const playerNameInput = document.getElementById("playerName");
   const saveStatus = document.getElementById("saveStatus");
   const rankPanel = document.getElementById("rankPanel");
+  const imageStatus = document.getElementById("imageStatus");
+  const rulesModal = document.getElementById("rulesModal");
+  const rulesButton = document.getElementById("rulesButton");
+  const closeRules = document.getElementById("closeRules");
 
-  // Supabase公開設定：この公開用キーだけを設定してください。秘密鍵は絶対に入れないでください。
   const SUPABASE_URL = "https://whhkacmvdsncciclsnmw.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RX65B6PCsKcitE70f4UyNg_FB8niWGZ";
   const RECORDS_ENDPOINT = SUPABASE_URL + "/rest/v1/game_records";
@@ -220,8 +270,7 @@
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return String(mins).padStart(2, "0") + ":" +
-           String(secs).padStart(2, "0");
+    return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
   }
 
   function readBest() {
@@ -235,8 +284,7 @@
 
   function showBest() {
     const best = readBest();
-    bestDisplay.textContent =
-      best === null ? "--:--" : formatTime(best);
+    bestDisplay.textContent = best === null ? "--:--" : formatTime(best);
   }
 
   function updateTimer() {
@@ -254,15 +302,36 @@
     return array;
   }
 
+  function preloadImage(filename) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(filename);
+      image.onerror = () => reject(new Error(filename));
+      image.src = filename;
+    });
+  }
+
+  async function prepareImages() {
+    // 画像の読み込み完了を待たず、ゲームを開始できるようにする
+    restartButton.disabled = false;
+    const results = await Promise.allSettled(pictures.map(preloadImage));
+    const failed = results.filter(result => result.status === "rejected").length;
+
+    if (failed === 0) {
+      imageStatus.textContent = "イラストの準備ができました。ゲームを楽しんでね！";
+    } else {
+      imageStatus.textContent = "一部のイラストはまだ読み込み中、または読み込みに失敗しています。時間をおいて再度お試しください。";
+    }
+  }
+
   function renderBoard() {
     board.innerHTML = "";
-
     deck.forEach((card, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "card";
       button.textContent = "";
-      button.setAttribute("aria-label", "カード " + (index + 1));
+      button.setAttribute("aria-label", "裏向きのカード " + (index + 1));
       button.addEventListener("click", () => flipCard(index));
       board.appendChild(button);
       card.element = button;
@@ -292,13 +361,11 @@
     timerDisplay.textContent = "00:00";
     movesDisplay.textContent = "0";
     message.textContent = "同じ絵柄のカードを2枚ずつ見つけよう！";
-
     renderBoard();
   }
 
   function flipCard(index) {
     if (locked) return;
-
     const card = deck[index];
     if (card.open || card.matched) return;
 
@@ -331,14 +398,11 @@
       secondCard.matched = true;
       firstCard.element.classList.add("matched");
       secondCard.element.classList.add("matched");
-
       firstCard = null;
       secondCard = null;
       matchedPairs++;
 
-      if (matchedPairs === pictures.length) {
-        finishGame();
-      }
+      if (matchedPairs === pictures.length) finishGame();
     } else {
       locked = true;
       flipTimeout = setTimeout(() => {
@@ -348,7 +412,6 @@
           c.element.classList.remove("face-up");
           c.element.setAttribute("aria-label", "裏向きのカード");
         });
-
         firstCard = null;
         secondCard = null;
         locked = false;
@@ -402,8 +465,6 @@
       throw new Error("Supabase " + response.status + ": " + detail.slice(0, 240));
     }
     if (response.status === 204) return null;
-    // SupabaseのPrefer: return=minimalでは、成功時に本文が空の場合がある。
-    // 空の本文をJSONとして解析すると、保存成功後に誤ってエラー扱いになる。
     const responseText = await response.text();
     if (!responseText) return null;
     return JSON.parse(responseText);
@@ -439,18 +500,25 @@
   }
 
   function monthStartJST() {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year:"numeric", month:"2-digit" }).formatToParts(new Date());
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo", year:"numeric", month:"2-digit"
+    }).formatToParts(new Date());
     const y = parts.find(p => p.type === "year").value;
     const m = parts.find(p => p.type === "month").value;
     return `${y}-${m}-01`;
   }
+
   function esc(value) {
-    return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    return String(value).replace(/[&<>"']/g, c => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    }[c]));
   }
+
   function timeText(ms) {
     const total = Math.floor(ms / 1000);
     return formatTime(total) + "." + String(Math.floor(ms % 1000 / 100)).padStart(1, "0");
   }
+
   function renderRanking() {
     if (!cachedRecords.length) {
       rankPanel.innerHTML = "<p>まだ記録がありません。最初の記録を作ってみよう！</p>";
@@ -459,29 +527,47 @@
     const month = monthStartJST();
     const monthly = cachedRecords.filter(r => r.played_on >= month);
     let title = "", rows = [];
+
     if (rankingMode === "fast") {
       title = "タイムアタック（今月の最速クリアタイム）";
       const best = new Map();
-      monthly.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
-      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
+      monthly.forEach(r => {
+        if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r);
+      });
+      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10)
+        .map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
     } else if (rankingMode === "moves") {
       title = "最短手数（今月の最少手数）";
       const best = new Map();
-      monthly.forEach(r => { if (!best.has(r.player_name) || r.moves < best.get(r.player_name).moves || (r.moves === best.get(r.player_name).moves && r.clear_time_ms < best.get(r.player_name).clear_time_ms)) best.set(r.player_name, r); });
-      rows = [...best.values()].sort((a,b)=>a.moves-b.moves || a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${r.moves}手（${timeText(r.clear_time_ms)}）`);
+      monthly.forEach(r => {
+        if (!best.has(r.player_name) || r.moves < best.get(r.player_name).moves ||
+          (r.moves === best.get(r.player_name).moves && r.clear_time_ms < best.get(r.player_name).clear_time_ms)) best.set(r.player_name, r);
+      });
+      rows = [...best.values()].sort((a,b)=>a.moves-b.moves || a.clear_time_ms-b.clear_time_ms).slice(0,10)
+        .map(r=>`${esc(r.player_name)} — ${r.moves}手（${timeText(r.clear_time_ms)}）`);
     } else if (rankingMode === "days") {
       title = "プレイ日数（今月プレイした日数）";
       const days = new Map();
-      monthly.forEach(r => { if (!days.has(r.player_name)) days.set(r.player_name, new Set()); days.get(r.player_name).add(r.played_on); });
-      rows = [...days.entries()].sort((a,b)=>b[1].size-a[1].size || a[0].localeCompare(b[0],"ja")).slice(0,10).map(([name, dates])=>`${esc(name)} — ${dates.size}日`);
+      monthly.forEach(r => {
+        if (!days.has(r.player_name)) days.set(r.player_name, new Set());
+        days.get(r.player_name).add(r.played_on);
+      });
+      rows = [...days.entries()].sort((a,b)=>b[1].size-a[1].size || a[0].localeCompare(b[0],"ja"))
+        .slice(0,10).map(([name, dates])=>`${esc(name)} — ${dates.size}日`);
     } else {
       title = "歴代タイムアタック（歴代最速クリアタイム）";
       const best = new Map();
-      cachedRecords.forEach(r => { if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r); });
-      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10).map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
+      cachedRecords.forEach(r => {
+        if (!best.has(r.player_name) || r.clear_time_ms < best.get(r.player_name).clear_time_ms) best.set(r.player_name, r);
+      });
+      rows = [...best.values()].sort((a,b)=>a.clear_time_ms-b.clear_time_ms).slice(0,10)
+        .map(r=>`${esc(r.player_name)} — ${timeText(r.clear_time_ms)}（${r.moves}手）`);
     }
-    rankPanel.innerHTML = `<h3>${title}</h3>` + (rows.length ? `<ol>${rows.map(r=>`<li>${r}</li>`).join("")}</ol>` : "<p>今月の記録はまだありません。</p>");
+
+    rankPanel.innerHTML = `<h3>${title}</h3>` +
+      (rows.length ? `<ol>${rows.map(r=>`<li>${r}</li>`).join("")}</ol>` : "<p>今月の記録はまだありません。</p>");
   }
+
   async function loadRankings() {
     if (!configured()) {
       saveStatus.textContent = "公開用キーの設定待ちです。";
@@ -489,7 +575,8 @@
       return;
     }
     try {
-      const data = await apiFetch(RECORDS_ENDPOINT + "?select=player_name,clear_time_ms,moves,played_on,created_at&order=created_at.desc&limit=5000");
+      const data = await apiFetch(RECORDS_ENDPOINT +
+        "?select=player_name,clear_time_ms,moves,played_on,created_at&order=created_at.desc&limit=5000");
       cachedRecords = Array.isArray(data) ? data : [];
       renderRanking();
       saveStatus.textContent = "共通ランキングに接続しました。";
@@ -499,6 +586,7 @@
       console.error(error);
     }
   }
+
   document.querySelectorAll("[data-rank]").forEach(button => button.addEventListener("click", () => {
     rankingMode = button.dataset.rank;
     document.querySelectorAll("[data-rank]").forEach(b => b.classList.toggle("active", b === button));
@@ -506,8 +594,15 @@
   }));
 
   restartButton.addEventListener("click", startGame);
+  rulesButton.addEventListener("click", () => rulesModal.classList.add("open"));
+  closeRules.addEventListener("click", () => rulesModal.classList.remove("open"));
+  rulesModal.addEventListener("click", event => {
+    if (event.target === rulesModal) rulesModal.classList.remove("open");
+  });
+
   showBest();
   startGame();
+  prepareImages();
   loadRankings();
 })();
 </script>
