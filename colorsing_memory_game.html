@@ -224,13 +224,16 @@
 
 <script>
 (() => {
-  // GitHubにアップロードした15枚のイラスト
+  // GitHubにアップロードした24枚のイラスト
   const pictures = [
     "card1.new.PNG", "card2.new.PNG", "card3.new.PNG",
     "card4.new.PNG", "card5.new.PNG", "card6.new.PNG",
     "card7.new.PNG", "card8.new.PNG", "card9.new.PNG",
     "card10.new.PNG", "card11.new.PNG", "card12.new.PNG",
-    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG"
+    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG",
+    "card16.new.PNG", "card17.new.PNG", "card18.new.PNG",
+    "card19.new.PNG", "card20.new.PNG", "card21.new.PNG",
+    "card22.new.PNG", "card23.new.PNG", "card24.new.PNG"
   ];
 
   const board = document.getElementById("board");
@@ -342,8 +345,11 @@
     clearInterval(timerInterval);
     clearTimeout(flipTimeout);
 
+    // 24種類からランダムに15種類を選び、それぞれ2枚ずつにする
+    const selectedPictures = shuffle([...pictures]).slice(0, 15);
+
     deck = shuffle(
-      pictures.flatMap((picture, pairId) => [
+      selectedPictures.flatMap((picture, pairId) => [
         { pairId, picture, open: false, matched: false },
         { pairId, picture, open: false, matched: false }
       ])
@@ -402,7 +408,7 @@
       secondCard = null;
       matchedPairs++;
 
-      if (matchedPairs === pictures.length) finishGame();
+      if (matchedPairs === 15) finishGame();
     } else {
       locked = true;
       flipTimeout = setTimeout(() => {
