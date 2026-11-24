@@ -172,7 +172,7 @@
 
 <div class="player">
   <label for="playerName" style="align-self:center">ぽよに呼ばれている名前</label>
-  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="毎回同じ名前で入力♪">
+  <input id="playerName" maxlength="20" autocomplete="nickname" placeholder="毎回同じ名前で入力♪" required>
 </div>
 <div id="imageStatus" class="image-status" aria-live="polite">イラストを準備しています。ゲームはいつでも始められます。</div>
 <div id="board" aria-label="神経衰弱のカード"></div>
@@ -211,29 +211,27 @@
     もちろん、ランキングを気にせず遊ぶだけでも大歓迎です！</p>
     <h3>遊び方</h3>
     <ol>
-      <li>「ゲームを始める」を押してスタート。</li>
+      <li>「ぽよに呼ばれている名前」を入力して「ゲームを始める」を押そう。</li>
+      <li>カードがシャッフルされたら、好きなタイミングで最初の1枚をめくろう。その瞬間にタイム計測が始まるよ。</li>
       <li>カードを2枚ずつめくろう。</li>
       <li>同じ絵柄が出たらペア成立！</li>
       <li>違う絵柄ならカードは元に戻るよ。</li>
       <li>15組すべてそろえたらクリア！</li>
     </ol>
-    <p>ランキングに参加するときは、毎回同じ名前で入力してね！</p>
+    <p>2回目以降は前回の名前が自動で入るよ。名前を変えると、ランキングでは別のプレイヤーとして集計されるよ。同じ名前で遊ぶときは、毎回同じ表記にしてね！</p>
     <button class="action-button modal-close" id="closeRules" type="button">閉じる</button>
   </div>
 </div>
 
 <script>
 (() => {
-  // GitHubにアップロードした24枚のイラスト
+  // GitHubにアップロードした15枚のイラスト
   const pictures = [
     "card1.new.PNG", "card2.new.PNG", "card3.new.PNG",
     "card4.new.PNG", "card5.new.PNG", "card6.new.PNG",
     "card7.new.PNG", "card8.new.PNG", "card9.new.PNG",
     "card10.new.PNG", "card11.new.PNG", "card12.new.PNG",
-    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG",
-    "card16.new.PNG", "card17.new.PNG", "card18.new.PNG",
-    "card19.new.PNG", "card20.new.PNG", "card21.new.PNG",
-    "card22.new.PNG", "card23.new.PNG", "card24.new.PNG"
+    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG"
   ];
 
   const board = document.getElementById("board");
@@ -267,8 +265,11 @@
   let elapsedMs = 0;
   let timerInterval = null;
   let flipTimeout = null;
+  let activePlayerName = "";
+  let gameReady = false;
 
   const bestKey = "poyoMemoryBestV1";
+  const playerNameKey = "poyoMemoryPlayerNameV1";
 
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -288,6 +289,22 @@
   function showBest() {
     const best = readBest();
     bestDisplay.textContent = best === null ? "--:--" : formatTime(best);
+  }
+
+  function restorePlayerName() {
+    try {
+      playerNameInput.value = localStorage.getItem(playerNameKey) || "";
+    } catch (e) {
+      playerNameInput.value = "";
+    }
+  }
+
+  function rememberPlayerName(name) {
+    try {
+      localStorage.setItem(playerNameKey, name);
+    } catch (e) {
+      // 名前の端末保存に失敗してもゲーム自体は続行する
+    }
   }
 
   function updateTimer() {
@@ -316,7 +333,6 @@
 
   async function prepareImages() {
     // 画像の読み込み完了を待たず、ゲームを開始できるようにする
-    restartButton.disabled = false;
     const results = await Promise.allSettled(pictures.map(preloadImage));
     const failed = results.filter(result => result.status === "rejected").length;
 
@@ -342,14 +358,24 @@
   }
 
   function startGame() {
+    const name = playerNameInput.value.trim().slice(0, 20);
+
+    if (!name) {
+      playerNameInput.focus();
+      message.textContent = "ゲームを始める前に「ぽよに呼ばれている名前」を入力してね！";
+      return;
+    }
+
+    // このプレイの記録名を開始時点で確定する
+    activePlayerName = name;
+    playerNameInput.value = name;
+    rememberPlayerName(name);
+
     clearInterval(timerInterval);
     clearTimeout(flipTimeout);
 
-    // 24種類からランダムに15種類を選び、それぞれ2枚ずつにする
-    const selectedPictures = shuffle([...pictures]).slice(0, 15);
-
     deck = shuffle(
-      selectedPictures.flatMap((picture, pairId) => [
+      pictures.flatMap((picture, pairId) => [
         { pairId, picture, open: false, matched: false },
         { pairId, picture, open: false, matched: false }
       ])
@@ -358,6 +384,7 @@
     firstCard = null;
     secondCard = null;
     locked = false;
+    gameReady = true;
     matchedPairs = 0;
     moves = 0;
     startedAt = null;
@@ -366,12 +393,14 @@
 
     timerDisplay.textContent = "00:00";
     movesDisplay.textContent = "0";
-    message.textContent = "同じ絵柄のカードを2枚ずつ見つけよう！";
+    message.textContent = "カードをシャッフルしました！最初のカードをめくるとタイム計測が始まります。";
+    playerNameInput.disabled = true;
+    restartButton.disabled = true;
     renderBoard();
   }
 
   function flipCard(index) {
-    if (locked) return;
+    if (!gameReady || locked) return;
     const card = deck[index];
     if (card.open || card.matched) return;
 
@@ -408,7 +437,7 @@
       secondCard = null;
       matchedPairs++;
 
-      if (matchedPairs === 15) finishGame();
+      if (matchedPairs === pictures.length) finishGame();
     } else {
       locked = true;
       flipTimeout = setTimeout(() => {
@@ -444,6 +473,9 @@
     }
 
     showBest();
+    gameReady = false;
+    playerNameInput.disabled = false;
+    restartButton.disabled = false;
     message.innerHTML =
       "🎉 クリア！ おめでとう！<br>" +
       "タイム：" + formatTime(elapsedSeconds) +
@@ -481,9 +513,9 @@
       saveStatus.textContent = "Supabaseの公開用キーをHTMLに設定すると、共通ランキングに記録されます。";
       return;
     }
-    const name = playerNameInput.value.trim().slice(0, 20);
+    const name = activePlayerName;
     if (!name) {
-      saveStatus.textContent = "今回の記録は未保存です。参加名を入力してから、もう一度プレイしてください。";
+      saveStatus.textContent = "今回の記録名を確認できないため、保存を中止しました。";
       return;
     }
     try {
@@ -607,7 +639,8 @@
   });
 
   showBest();
-  startGame();
+  restorePlayerName();
+  message.textContent = "名前を入力して「ゲームを始める」を押してね。名前を入力するまではカードをめくれません。";
   prepareImages();
   loadRankings();
 })();
