@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -225,14 +226,19 @@
 
 <script>
 (() => {
-  // GitHubにアップロードした15枚のイラスト
+  // GitHubにアップロードした24枚のイラスト
   const pictures = [
     "card1.new.PNG", "card2.new.PNG", "card3.new.PNG",
     "card4.new.PNG", "card5.new.PNG", "card6.new.PNG",
     "card7.new.PNG", "card8.new.PNG", "card9.new.PNG",
     "card10.new.PNG", "card11.new.PNG", "card12.new.PNG",
-    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG"
+    "card13.new.PNG", "card14.new.PNG", "card15.new.PNG",
+    "card16.new.PNG", "card17.new.PNG", "card18.new.PNG",
+    "card19.new.PNG", "card20.new.PNG", "card21.new.PNG",
+    "card22.new.PNG", "card23.new.PNG", "card24.new.PNG"
   ];
+
+  const PAIRS_PER_GAME = 15;
 
   const board = document.getElementById("board");
   const timerDisplay = document.getElementById("timer");
@@ -374,8 +380,12 @@
     clearInterval(timerInterval);
     clearTimeout(flipTimeout);
 
+    // 24枚からランダムに15種類を選ぶ
+    const selectedPictures = shuffle([...pictures]).slice(0, PAIRS_PER_GAME);
+
+    // 選んだ15種類をそれぞれ2枚ずつにしてシャッフルする
     deck = shuffle(
-      pictures.flatMap((picture, pairId) => [
+      selectedPictures.flatMap((picture, pairId) => [
         { pairId, picture, open: false, matched: false },
         { pairId, picture, open: false, matched: false }
       ])
@@ -437,7 +447,7 @@
       secondCard = null;
       matchedPairs++;
 
-      if (matchedPairs === pictures.length) finishGame();
+      if (matchedPairs === PAIRS_PER_GAME) finishGame();
     } else {
       locked = true;
       flipTimeout = setTimeout(() => {
